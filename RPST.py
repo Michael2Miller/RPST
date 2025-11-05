@@ -9,8 +9,8 @@ from telegram.ext import (
     ContextTypes
 )
 
-# --- [ 1. الإعدادات ] ---
-# اقرأ المتغيرات من Railway
+# --- [ 1. Settings ] ---
+# Read variables from Railway
 try:
     TOKEN = os.environ['BOT_TOKEN']
     ADMIN_ID = int(os.environ['ADMIN_ID'])
@@ -27,27 +27,31 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# --- [ 2. دوال البوت ] ---
+# --- [ 2. Bot Functions ] ---
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """إرسال رسالة ترحيبية"""
+    """Send a welcome message"""
     user_id = update.message.from_user.id
     
     if user_id == ADMIN_ID:
-        await update.message.reply_text("مرحباً أيها الأدمن. هذا هو بوت الدعم الخاص بك. أي رسالة تصلك من هنا، قم بالرد عليها لإرسالها للمستخدم.")
+        # --- [ 🟢 تم تعديل هذا السطر 🟢 ] ---
+        await update.message.reply_text("Hello Admin. This is your support bot. Any message you receive here, reply to it to send your response to the user.")
     else:
-        await update.message.reply_text("مرحباً بك في بوت الدعم. أرسل رسالتك (أو لقطة الشاشة) وسيقوم الأدمن بالرد عليك قريباً.")
+        welcome_text = (
+            "Welcome to the Random Partner Support Team 🎲\n\n"
+            "If you have made a payment, please send a screenshot of the payment notification and wait for our technical team to respond."
+        )
+        await update.message.reply_text(welcome_text)
 
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """(للمستخدم العادي) استلام الرسالة وإعادة توجيهها للأدمن"""
+    """(For normal user) Receive message and forward to admin"""
     user = update.message.from_user
     logger.info(f"New message from user {user.id} ({user.first_name})")
     
-    # رسالة تنبيهية للمستخدم
-    await update.message.reply_text("✅ تم إرسال رسالتك إلى الدعم. يرجى الانتظار...")
+    # Alert message for the user
+    await update.message.reply_text("✅ Your message has been sent to support. Please wait...")
     
-    # إعادة توجيه رسالة المستخدم الأصلية إلى الأدمن
-    # هذا يحافظ على هوية المرسل (forward_from) ليتمكن الأدمن من الرد
+    # Forward the user's original message to the admin
     try:
         await context.bot.forward_message(
             chat_id=ADMIN_ID,
@@ -56,48 +60,48 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
     except Exception as e:
         logger.error(f"Failed to forward message from {user.id}: {e}")
-        await update.message.reply_text("عذراً، حدث خطأ أثناء إرسال رسالتك. حاول مجدداً.")
-        # إرسال إشعار للأدمن في حال فشل التوجيه (بسبب إعدادات الخصوصية)
+        await update.message.reply_text("Sorry, an error occurred while sending your message. Please try again.")
+        # Send a notification to the admin if forwarding fails (due to privacy settings)
         await context.bot.send_message(
             chat_id=ADMIN_ID,
-            text=f"⚠️ فشل استلام رسالة من المستخدم {user.id} ({user.first_name}).\n"
-                 f"السبب المحتمل: قام المستخدم بتفعيل إعدادات خصوصية تمنع إعادة التوجيه."
+            text=f"⚠️ Failed to receive message from user {user.id} ({user.first_name}).\n"
+                 f"Possible reason: User's privacy settings prevent forwarding."
         )
 
 async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """(للأدمن) استلام الرد وإرساله للمستخدم الأصلي"""
+    """(For Admin) Receive reply and send to the original user"""
     
-    # التأكد أن الرسالة هي رد (Reply)
+    # Check if the message is a reply
     if not update.message.reply_to_message:
-        await update.message.reply_text("لإرسال رد، يجب أن تستخدم ميزة 'الرد' (Reply) على رسالة المستخدم.")
+        await update.message.reply_text("To send a reply, you must use the 'Reply' feature on the user's message.")
         return
 
-    # التأكد أن الرد على رسالة مُعادة التوجيه (Forwarded)
+    # Check if replying to a forwarded message
     if not update.message.reply_to_message.forward_from:
-        await update.message.reply_text("خطأ: أنت لا ترد على رسالة مستخدم. يرجى الرد على الرسالة الموجهة.")
+        await update.message.reply_text("Error: You are not replying to a user's message. Please reply to the forwarded message.")
         return
     
-    # الحصول على ID المستخدم الأصلي
+    # Get the original user's ID
     original_user_id = update.message.reply_to_message.forward_from.id
     admin_message_id = update.message.message_id
     
     logger.info(f"Admin replying to user {original_user_id}")
     
     try:
-        # نسخ رسالة الأدمن (سواء كانت نص، صورة، ملصق) وإرسالها للمستخدم
+        # Copy the admin's message (text, photo, sticker, etc.) and send to the user
         await context.bot.copy_message(
             chat_id=original_user_id,
             from_chat_id=ADMIN_ID,
             message_id=admin_message_id
         )
-        # إبلاغ الأدمن بنجاح الإرسال
-        await update.message.reply_text("✅ تم إرسال ردك للمستخدم.")
+        # Notify the admin of success
+        await update.message.reply_text("✅ Your reply has been sent to the user.")
         
     except Exception as e:
         logger.error(f"Failed to send admin reply to {original_user_id}: {e}")
-        await update.message.reply_text(f"❌ فشل إرسال الرد للمستخدم {original_user_id}. السبب: {e}")
+        await update.message.reply_text(f"❌ Failed to send reply to user {original_user_id}. Reason: {e}")
 
-# --- [ 3. دالة التشغيل ] ---
+# --- [ 3. Main Function ] ---
 
 def main():
     if not TOKEN:
@@ -107,16 +111,16 @@ def main():
     
     application = Application.builder().token(TOKEN).build()
 
-    # أمر /start للجميع
+    # /start command for everyone
     application.add_handler(CommandHandler("start", start_command))
 
-    # مستجيب لردود الأدمن (فقط الأدمن + فقط الردود)
+    # Handler for Admin replies (only admin + only replies)
     application.add_handler(MessageHandler(
         filters.User(user_id=ADMIN_ID) & filters.REPLY, 
         handle_admin_reply
     ))
     
-    # مستجيب لرسائل المستخدمين (فقط الرسائل الخاصة + ليس من الأدمن)
+    # Handler for user messages (only private messages + not from admin)
     application.add_handler(MessageHandler(
         filters.ChatType.PRIVATE & (~filters.User(user_id=ADMIN_ID)), 
         handle_user_message
